@@ -1,0 +1,173 @@
+name: 'Build, Grype and Syft'
+description: |
+  Generates a Docker image locally which will then be SBOM'd and scanned. 
+  The SBOM will be scanned and then the image will be scanned to ensure as clean an image as possible.
+branding:
+  icon: layers
+  color: purple
+inputs:
+  image-repo:
+    description: "The repo to push the image to."
+    required: true
+  repo-username:
+    description: "The username to log into the repo."
+    required: true
+  repo-password:
+    description: "The password to log into the repo."
+    required: true
+  image-name:
+    description: "The name of the image to build."
+    required: true
+  image-tag:
+    description: "The tag to build the image with - provide a matrix to build against multiple tags as each will need to be SBOM'd, scanned and signed independently."
+    required: true
+  cosign-private-key:
+    description: "A private key with which to sign the image using cosign."
+    required: true
+  cosign-password:
+    description: "The password to unlock the private key."
+    required: true
+  add-latest-tag:
+    description: "If true, the 'latest' tag will also be added."
+    required: false
+    default: 'false'
+  publish-image:
+    description: "If true the image will be published to the repo."
+    default: 'false'
+    required: false
+  min-severity:
+    description: "This can be set to negligible, low, medium, high or critical. It denotes at what point the pipeline would fail if it finds this severity or higher."
+    required: true
+    default: high
+
+runs:
+  using: "composite"
+  steps:
+    # Setup Docker buildx
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    # Build the local image
+    - name: Build Local Container
+      uses: docker/build-push-action@v4
+      with:
+        tags: "local/${{ inputs.image-name }}:latest"
+        push: false
+        load: true
+
+    # Create an SBOM file for the local image and upload the results
+    - name: Create SBOM
+      uses: anchore/sbom-action@v0
+      id: create-sbom
+      with:
+        image: local/cloud-cli-tools:latest
+        format: spdx-json
+        output-file: "${{ inputs.image-name }}-sbom.spdx.json"
+
+    # Scan the SBOM
+    - name: Scan SBOM
+      uses: anchore/scan-action@v3
+      id: scan-sbom
+      with:
+        sbom: "${{ inputs.image-name }}-sbom.spdx.json"
+        fail-build: true
+        severity-cutoff: ${{ inputs.min-severity }}
+        output-format: json
+
+    # Upload the SBOM scan results
+    - name: Upload SBOM Scan Results
+      uses: actions/upload-artifact@v3
+      with:
+        name: "${{ inputs.image-name }}-sbom-results.json"
+        path: "results.json"
+
+    # Scan the local image
+    - name: Scan image
+      uses: anchore/scan-action@v3
+      with:
+        image: "local/${{ inputs.image-name }}:latest"
+        fail-build: true
+        severity-cutoff: ${{ inputs.min-severity }}
+        output-format: json
+
+    # Upload the image scan results
+    - name: Upload Container Scan Results
+      uses: actions/upload-artifact@v3
+      with:
+        name: "${{ inputs.image-name }}-scan-results.json"
+        path: "results.json"
+
+    # Install cosign
+    - name: Install Cosign
+      if: inputs.publish-image == 'true'
+      uses: sigstore/cosign-installer@v3.0.1
+
+    #    - name: Checkout
+    #      uses: actions/checkout@v3
+
+    # Login into registry
+    - name: Login to GitHub Container Registry
+      if: inputs.publish-image == 'true'
+      uses: docker/login-action@v2
+      with:
+        registry: ${{ inputs.image-repo }}
+        username: ${{ inputs.repo-username }}
+        password: ${{ inputs.repo-password }}
+
+#    # Grab the metadata from the user-defined tagged image
+#    - name: Fetch image metadata
+#      if: inputs.publish-image == 'true'
+#      id: meta
+#      uses: docker/metadata-action@v4
+#      with:
+#        images: ${{ inputs.image-repo }}/${{ inputs.repo-username }}/${{ inputs.image-name }}
+#        tags: |
+#          type=sha,format=long,prefix=sha:
+#          type=semver,pattern={{version}}
+
+    # Push the image with the user-defined tag
+    - name: Build and push
+      if: inputs.publish-image == 'true'
+      id: build-tagged
+      uses: docker/build-push-action@v4
+      with:
+        platforms: linux/amd64
+        push: true
+        tags: |
+          ${{ inputs.image-repo }}/${{ inputs.repo-username }}/${{ inputs.image-name }}:${{ inputs.image-tag }}
+
+    # Push the image with the user-defined tag and the "latest" tag
+#    - name: Build and push
+#      if: inputs.publish-image == 'true' && inputs.add-latest-tag == 'true'
+#      id: build-latest
+#      uses: docker/build-push-action@v4
+#      with:
+#        platforms: linux/amd64
+#        push: true
+#        tags: |
+#          ${{ steps.meta.outputs.tags }}
+#          ${{ inputs.image-repo }}/${{ inputs.repo-username }}/${{ inputs.image-name }}:latest
+#        labels: ${{ steps.meta.outputs.labels }}
+
+    # Sign user-defined tagged image
+#    - name: Sign tagged image
+#      if: inputs.publish-image == 'true' && inputs.add-latest-tag != 'true'
+#      shell: bash
+#      run: |
+#        cosign sign --key env://COSIGN_PRIVATE_KEY ${TAGS}
+#      env:
+#        TAGS: ${{ inputs.image-repo }}/${{ inputs.repo-username }}/${{ inputs.image-name }}:${{ github.ref_name }}
+#        COSIGN_PRIVATE_KEY: ${{inputs.cosign-private-key}}
+#        COSIGN_PASSWORD: ${{inputs.cosign-password}}
+
+    # Sign images - TODO: make it so tlog-upload is optional
+    - name: Sign tagged image
+      if: inputs.publish-image == 'true'
+      shell: bash
+      run: |
+        cosign sign --tlog-upload=false --key env://COSIGN_PRIVATE_KEY ${{ inputs.image-repo }}/${{ inputs.repo-username }}/${{ inputs.image-name }}:${{ inputs.image-tag }}@${{ steps.build-tagged.outputs.digest }}
+      env:
+#        TAGS: ${{ steps.meta.outputs.tags }}
+        COSIGN_PRIVATE_KEY: ${{inputs.cosign-private-key}}
+        COSIGN_PASSWORD: ${{inputs.cosign-password}}
+        COSIGN_EXPERIMENTAL: "true"
