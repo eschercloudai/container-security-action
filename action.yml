@@ -62,7 +62,7 @@ runs:
         tags: "local/${{ inputs.image-name }}:latest"
         push: false
         load: true
-        file: "${{inputs.dockerfile-path}}"
+        file: "${{inputs.dockerfile-path}}/Dockerfile"
 
     # Create an SBOM file for the local image and upload the results
     - name: Create SBOM
@@ -128,7 +128,7 @@ runs:
       with:
         platforms: linux/amd64
         push: true
-        file: "${{inputs.dockerfile-path}}"
+        file: "${{inputs.dockerfile-path}}/Dockerfile"
         tags: |
           ${{ inputs.image-repo }}/${{ inputs.repo-username }}/${{ inputs.image-name }}:${{ inputs.image-tag }}
 
