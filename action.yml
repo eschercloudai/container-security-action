@@ -27,6 +27,10 @@ inputs:
   cosign-password:
     description: "The password to unlock the private key."
     required: true
+  cosign-tlog:
+    description: "Set to true to upload to tlog for transparency."
+    required: false
+    default: 'false'
   add-latest-tag:
     description: "If true, the 'latest' tag will also be added."
     required: false
@@ -39,6 +43,10 @@ inputs:
     description: "This can be set to negligible, low, medium, high or critical. It denotes at what point the pipeline would fail if it finds this severity or higher."
     required: true
     default: high
+  dockerfile-path:
+    description: "Path to the Dockerfile. (default {context}/Dockerfile)"
+    required: false
+    default: "."
 
 runs:
   using: "composite"
@@ -54,6 +62,7 @@ runs:
         tags: "local/${{ inputs.image-name }}:latest"
         push: false
         load: true
+        file: "${{inputs.dockerfile-path}}/Dockerfile"
 
     # Create an SBOM file for the local image and upload the results
     - name: Create SBOM
@@ -102,9 +111,6 @@ runs:
       if: inputs.publish-image == 'true'
       uses: sigstore/cosign-installer@v3.0.1
 
-    #    - name: Checkout
-    #      uses: actions/checkout@v3
-
     # Login into registry
     - name: Login to GitHub Container Registry
       if: inputs.publish-image == 'true'
@@ -114,17 +120,6 @@ runs:
         username: ${{ inputs.repo-username }}
         password: ${{ inputs.repo-password }}
 
-#    # Grab the metadata from the user-defined tagged image
-#    - name: Fetch image metadata
-#      if: inputs.publish-image == 'true'
-#      id: meta
-#      uses: docker/metadata-action@v4
-#      with:
-#        images: ${{ inputs.image-repo }}/${{ inputs.repo-username }}/${{ inputs.image-name }}
-#        tags: |
-#          type=sha,format=long,prefix=sha:
-#          type=semver,pattern={{version}}
-
     # Push the image with the user-defined tag
     - name: Build and push
       if: inputs.publish-image == 'true'
@@ -133,41 +128,17 @@ runs:
       with:
         platforms: linux/amd64
         push: true
+        file: "${{inputs.dockerfile-path}}/Dockerfile"
         tags: |
           ${{ inputs.image-repo }}/${{ inputs.repo-username }}/${{ inputs.image-name }}:${{ inputs.image-tag }}
 
-    # Push the image with the user-defined tag and the "latest" tag
-#    - name: Build and push
-#      if: inputs.publish-image == 'true' && inputs.add-latest-tag == 'true'
-#      id: build-latest
-#      uses: docker/build-push-action@v4
-#      with:
-#        platforms: linux/amd64
-#        push: true
-#        tags: |
-#          ${{ steps.meta.outputs.tags }}
-#          ${{ inputs.image-repo }}/${{ inputs.repo-username }}/${{ inputs.image-name }}:latest
-#        labels: ${{ steps.meta.outputs.labels }}
-
-    # Sign user-defined tagged image
-#    - name: Sign tagged image
-#      if: inputs.publish-image == 'true' && inputs.add-latest-tag != 'true'
-#      shell: bash
-#      run: |
-#        cosign sign --key env://COSIGN_PRIVATE_KEY ${TAGS}
-#      env:
-#        TAGS: ${{ inputs.image-repo }}/${{ inputs.repo-username }}/${{ inputs.image-name }}:${{ github.ref_name }}
-#        COSIGN_PRIVATE_KEY: ${{inputs.cosign-private-key}}
-#        COSIGN_PASSWORD: ${{inputs.cosign-password}}
-
-    # Sign images - TODO: make it so tlog-upload is optional
+    # Sign images
     - name: Sign tagged image
       if: inputs.publish-image == 'true'
       shell: bash
       run: |
-        cosign sign --tlog-upload=false --key env://COSIGN_PRIVATE_KEY ${{ inputs.image-repo }}/${{ inputs.repo-username }}/${{ inputs.image-name }}:${{ inputs.image-tag }}@${{ steps.build-tagged.outputs.digest }}
+        cosign sign --tlog-upload=${{inputs.cosign-tlog}} --key env://COSIGN_PRIVATE_KEY ${{ inputs.image-repo }}/${{ inputs.repo-username }}/${{ inputs.image-name }}:${{ inputs.image-tag }}@${{ steps.build-tagged.outputs.digest }}
       env:
-#        TAGS: ${{ steps.meta.outputs.tags }}
         COSIGN_PRIVATE_KEY: ${{inputs.cosign-private-key}}
         COSIGN_PASSWORD: ${{inputs.cosign-password}}
         COSIGN_EXPERIMENTAL: "true"
