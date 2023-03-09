@@ -1,4 +1,4 @@
-name: Main
+name: Release on tag
 
 on:
   push:
@@ -10,11 +10,9 @@ jobs:
   release:
     name: Create Release
     runs-on: 'ubuntu-22.04'
-    needs: security-checks
     steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
+      - name: Checkout
+        uses: actions/checkout@v3
       - name: Release Notes
         run: |
           git log $(git describe HEAD~ --tags --abbrev=0)..HEAD --pretty='format:* %h %s%n  * %an <%ae>' --no-merges >> ".github/RELEASE-TEMPLATE.md"
