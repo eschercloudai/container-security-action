@@ -59,7 +59,7 @@ runs:
     - name: Build Local Container
       uses: docker/build-push-action@v4
       with:
-        tags: "local/${{ inputs.image-name }}:latest"
+        tags: "local/${{ inputs.image-name }}:${{ inputs.image-tag }}"
         push: false
         load: true
         file: "${{inputs.dockerfile-path}}/Dockerfile"
@@ -94,7 +94,7 @@ runs:
     - name: Scan image
       uses: anchore/scan-action@v3
       with:
-        image: "local/${{ inputs.image-name }}:latest"
+        image: "local/${{ inputs.image-name }}:${{ inputs.image-tag }}"
         fail-build: true
         severity-cutoff: ${{ inputs.min-severity }}
         output-format: json
