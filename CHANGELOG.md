@@ -1,5 +1,33 @@
 # Changelog
 
+## Upcoming
+### Features:
+### Fixes:
+### Deprecated/Removed:
+
+## [ v0.0.3 ] - 06/04/2023
+### Features:
+* Added Trivy to replace Grype and Syft for SBOM creation and scanning and to replace Grype for image scanning
+* Added ability to provide a `.trivyignore` file to bypass particular CVE checks
+* Only fixed vulns will cause a failure, unfixed will appear in a report
+
+### Fixes:
+
+### Deprecated/Removed:
+* Removed Grype and Syft
+
+## [ v0.0.2 ] - 15/03/2023
+
+### Features:
+* Added release process
+* Added optional tlog uploads for cosign
+
+### Fixes:
+* Corrected local image builds name/tag to use the one provided by user
+
+### Deprecated/Removed:
+
+
 ## [ v0.0.1 ] - 07/03/2023
 
 ### Features:
@@ -7,7 +35,6 @@
 * Container scanning done by Grype
 * Image signing done via cosign
 
+### Fixes:
 
-### Fixes
-
-### Deprecated/Removed
+### Deprecated/Removed:

@@ -39,10 +39,22 @@ inputs:
     description: "If true the image will be published to the repo."
     default: 'false'
     required: false
-  min-severity:
-    description: "This can be set to negligible, low, medium, high or critical. It denotes at what point the pipeline would fail if it finds this severity or higher."
+  check-severity:
+    description: "A comma deliminated (uppercase) list of severities to check for. If found the pipeline will fail. Support values: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
     required: true
     default: high
+  sbom-fail-on-detection:
+    description: "Must be 0 to succeed or any other number to fail if a severity is discovered at the `check-severity` level. This will be used as the exit code for the Trivy SBOM scan and 1 is recommended to differentiate it from the scan exit code."
+    required: true
+    default: "1"
+  scan-fail-on-detection:
+    description: "Must be 0 to succeed or any other number to fail if a severity is discovered at the `check-severity` level. This will be used as the exit code for the Trivy scan and 2 is recommended to differentiate it from the SBOM exit code."
+    required: true
+    default: "2"
+  trivyignore-file:
+    description: "Supply a Trivy ignore file to ignore specific CVEs and prevent a pipeline failure."
+    required: true
+    default: ""
   dockerfile-path:
     description: "Path to the Dockerfile. (default {context}/Dockerfile)"
     required: false
@@ -66,45 +78,70 @@ runs:
 
     # Create an SBOM file for the local image and upload the results
     - name: Create SBOM
-      uses: anchore/sbom-action@v0
+      uses: aquasecurity/trivy-action@0.9.2
       id: create-sbom
       with:
-        image: local/${{ inputs.image-name }}:${{ inputs.image-tag }}
+        scan-type: image
         format: spdx-json
-        output-file: "${{ inputs.image-name }}-sbom.spdx.json"
+        vuln-type: ''
+        scanners: ''
+        severity: ''
+        output: "${{ inputs.image-name }}-sbom.spdx.json"
+        image-ref: "local/${{ inputs.image-name }}:${{ inputs.image-tag }}"
+
+    # Upload the SBOM
+    - name: Upload SBOM
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: "${{ inputs.image-name }}-sbom.spdx.json"
+        path: "${{ inputs.image-name }}-sbom.spdx.json"
 
     # Scan the SBOM
     - name: Scan SBOM
-      uses: anchore/scan-action@v3
+      uses: aquasecurity/trivy-action@0.9.2
       id: scan-sbom
       with:
-        sbom: "${{ inputs.image-name }}-sbom.spdx.json"
-        fail-build: true
-        severity-cutoff: ${{ inputs.min-severity }}
-        output-format: json
+        scan-type: sbom
+        exit-code: ${{ inputs.sbom-fail-on-detection }}
+        ignore-unfixed: true
+        format: json
+        image-ref: "${{ inputs.image-name }}-sbom.spdx.json"
+        output: "${{ inputs.image-name }}-sbom-results.json"
+        vuln-type: ''
+        scanners: ''
+        severity: ${{ inputs.trivy-check-severity }}
+        trivyignores: ${{ inputs.trivyignore-file }}
 
     # Upload the SBOM scan results
     - name: Upload SBOM Scan Results
       uses: actions/upload-artifact@v3
+      if: (success() || failure()) && (steps.scan-sbom.conclusion == 'success' || steps.scan-sbom.outcome == 'failure')
       with:
         name: "${{ inputs.image-name }}-sbom-results.json"
-        path: "results.json"
+        path: "${{ inputs.image-name }}-sbom-results.json"
 
     # Scan the local image
     - name: Scan image
-      uses: anchore/scan-action@v3
+      id: image-scan
+      uses: aquasecurity/trivy-action@0.9.2
       with:
-        image: "local/${{ inputs.image-name }}:${{ inputs.image-tag }}"
-        fail-build: true
-        severity-cutoff: ${{ inputs.min-severity }}
-        output-format: json
+        image-ref: "local/${{ inputs.image-name }}:${{ inputs.image-tag }}"
+        format: 'json'
+        output: 'trivy-results.json'
+        exit-code: ${{ inputs.scan-fail-on-detection }}
+        ignore-unfixed: true
+        scanners: 'vuln,secret,config'
+        severity: ${{ inputs.trivy-check-severity }}
+        trivyignores: ${{ inputs.trivyignore-file }}
 
     # Upload the image scan results
     - name: Upload Container Scan Results
       uses: actions/upload-artifact@v3
+      if: (success() || failure()) && (steps.image-scan.conclusion == 'success' || steps.image-scan.outcome == 'failure')
       with:
         name: "${{ inputs.image-name }}-scan-results.json"
-        path: "results.json"
+        path: "trivy-results.json"
 
     # Install cosign
     - name: Install Cosign
