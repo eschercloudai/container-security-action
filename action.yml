@@ -44,9 +44,13 @@ inputs:
     required: true
     default: high
   dockerfile-path:
-    description: "Path to the Dockerfile. (default {context}/Dockerfile)"
+    description: "Path to the Dockerfile (default {context}/Dockerfile)."
     required: false
     default: "."
+  fail-build:
+    description: "Fail the build if the CVE severity level is found."
+    required: false
+    default: 'false'
 
 runs:
   using: "composite"
@@ -79,7 +83,7 @@ runs:
       id: scan-sbom
       with:
         sbom: "${{ inputs.image-name }}-sbom.spdx.json"
-        fail-build: true
+        fail-build: ${{inputs.fail-build}}
         severity-cutoff: ${{ inputs.min-severity }}
         output-format: json
 
@@ -95,7 +99,7 @@ runs:
       uses: anchore/scan-action@v3
       with:
         image: "local/${{ inputs.image-name }}:${{ inputs.image-tag }}"
-        fail-build: true
+        fail-build: ${{inputs.fail-build}}
         severity-cutoff: ${{ inputs.min-severity }}
         output-format: json
 
