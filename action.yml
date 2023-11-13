@@ -1,4 +1,4 @@
-name: 'Build, Grype and Syft'
+name: 'Build, Scan and Sign image using Trivy and Cosign'
 description: |
   Generates a Docker image locally which will then be SBOM'd and scanned. 
   The SBOM will be scanned and then the image will be scanned to ensure as clean an image as possible.
@@ -39,10 +39,50 @@ inputs:
     description: "If true the image will be published to the repo."
     default: 'false'
     required: false
-  min-severity:
-    description: "This can be set to negligible, low, medium, high or critical. It denotes at what point the pipeline would fail if it finds this severity or higher."
-    required: true
+  check-severity:
+    description: "A comma deliminated (uppercase) list of severities to check for. If found the pipeline will fail. Support values: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
+    required: false
     default: high
+  sbom-fail-on-detection:
+    description: "Must be 0 to succeed or any other number to fail if a severity is discovered at the `check-severity` level. This will be used as the exit code for the Trivy SBOM scan and 1 is recommended to differentiate it from the scan exit code."
+    required: false
+    default: "1"
+  scan-fail-on-detection:
+    description: "Must be 0 to succeed or any other number to fail if a severity is discovered at the `check-severity` level. This will be used as the exit code for the Trivy scan and 2 is recommended to differentiate it from the SBOM exit code."
+    required: false
+    default: "2"
+  trivyignore-file:
+    description: "Supply a Trivy ignore file to ignore specific CVEs and prevent a pipeline failure."
+    required: false
+    default: "trivyignore"
+  trivyignore-from-s3:
+    description: "If disabled, the trivyignore can be supplied via the repo itself but actions/checkout@v4 must be used before calling this action."
+    required: false
+    default: false
+  aws-endpoint:
+    description: "If the endpoint isn't a standard AWS one, pass it in here."
+    required: false
+    default: "https://some-s3-endpoint.com"
+  aws-region:
+    description: "The AWS Region."
+    required: false
+    default: "us-east-1"
+  aws-access-key:
+    description: "The S3 access key."
+    required: false
+    default: ""
+  aws-secret-key:
+    description: "The S3 secret key."
+    required: false
+    default: ""
+  s3-bucket:
+    description: "The S3 bucket in which the trivyignore file is stored."
+    required: false
+    default: "trivy"
+  s3-path:
+    description: "The path in the s3 bucket to the trivyignore file."
+    required: false
+    default: "trivyignore"
   dockerfile-path:
     description: "Path to the Dockerfile (default {context}/Dockerfile)."
     required: false
@@ -55,6 +95,25 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - name: Install AWS CLI
+      if: inputs.trivyignore-from-s3 == 'true'
+      shell: bash
+      run: |
+        #curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+        #unzip awscliv2.zip
+        #sudo ./aws/install --update
+        aws --version
+
+    - name: Pull From S3
+      if: inputs.trivyignore-from-s3 == 'true'
+      shell: bash
+      env:
+        AWS_ACCESS_KEY_ID: ${{ inputs.aws-access-key }}
+        AWS_SECRET_ACCESS_KEY: ${{ inputs.aws-secret-key }}
+        AWS_DEFAULT_REGION: ${{ inputs.aws-region }}
+      run: |
+        aws --endpoint-url=${{ inputs.aws-endpoint }} s3 cp s3://${{ inputs.s3-bucket }}/${{ inputs.s3-path }} ${{ inputs.trivyignore-file }}
+
     # Setup Docker buildx
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
@@ -70,45 +129,70 @@ runs:
 
     # Create an SBOM file for the local image and upload the results
     - name: Create SBOM
-      uses: anchore/sbom-action@v0
+      uses: aquasecurity/trivy-action@0.14.0
       id: create-sbom
       with:
-        image: local/${{ inputs.image-name }}:${{ inputs.image-tag }}
+        scan-type: image
         format: spdx-json
-        output-file: "${{ inputs.image-name }}-sbom.spdx.json"
+        vuln-type: ''
+        scanners: ''
+        severity: ''
+        output: "${{ inputs.image-name }}-sbom.spdx.json"
+        image-ref: "local/${{ inputs.image-name }}:${{ inputs.image-tag }}"
+
+    # Upload the SBOM
+    - name: Upload SBOM
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: "${{ inputs.image-name }}-sbom.spdx.json"
+        path: "${{ inputs.image-name }}-sbom.spdx.json"
 
     # Scan the SBOM
     - name: Scan SBOM
-      uses: anchore/scan-action@v3
+      uses: aquasecurity/trivy-action@0.14.0
       id: scan-sbom
       with:
-        sbom: "${{ inputs.image-name }}-sbom.spdx.json"
-        fail-build: ${{inputs.fail-build}}
-        severity-cutoff: ${{ inputs.min-severity }}
-        output-format: json
+        scan-type: sbom
+        exit-code: ${{ inputs.sbom-fail-on-detection }}
+        ignore-unfixed: true
+        format: json
+        image-ref: "${{ inputs.image-name }}-sbom.spdx.json"
+        output: "${{ inputs.image-name }}-sbom-results.json"
+        vuln-type: ''
+        scanners: ''
+        severity: ${{ inputs.check-severity }}
+        trivyignores: ${{ inputs.trivyignore-file }}
 
     # Upload the SBOM scan results
     - name: Upload SBOM Scan Results
       uses: actions/upload-artifact@v3
+      if: (success() || failure()) && (steps.scan-sbom.conclusion == 'success' || steps.scan-sbom.outcome == 'failure')
       with:
         name: "${{ inputs.image-name }}-sbom-results.json"
-        path: "results.json"
+        path: "${{ inputs.image-name }}-sbom-results.json"
 
     # Scan the local image
     - name: Scan image
-      uses: anchore/scan-action@v3
+      id: image-scan
+      uses: aquasecurity/trivy-action@0.14.0
       with:
-        image: "local/${{ inputs.image-name }}:${{ inputs.image-tag }}"
-        fail-build: ${{inputs.fail-build}}
-        severity-cutoff: ${{ inputs.min-severity }}
-        output-format: json
+        image-ref: "local/${{ inputs.image-name }}:${{ inputs.image-tag }}"
+        format: 'json'
+        output: 'trivy-results.json'
+        exit-code: ${{ inputs.scan-fail-on-detection }}
+        ignore-unfixed: true
+        scanners: 'vuln,secret,config'
+        severity: ${{ inputs.check-severity }}
+        trivyignores: ${{ inputs.trivyignore-file }}
 
     # Upload the image scan results
     - name: Upload Container Scan Results
       uses: actions/upload-artifact@v3
+      if: (success() || failure()) && (steps.image-scan.conclusion == 'success' || steps.image-scan.outcome == 'failure')
       with:
         name: "${{ inputs.image-name }}-scan-results.json"
-        path: "results.json"
+        path: "trivy-results.json"
 
     # Install cosign
     - name: Install Cosign
@@ -125,8 +209,8 @@ runs:
         password: ${{ inputs.repo-password }}
 
     # Push the image with the user-defined tag
-    - name: Build and push
-      if: inputs.publish-image == 'true'
+    - name: Build and push tagged
+      if: inputs.publish-image == 'true' && inputs.add-latest-tag != 'true'
       id: build-tagged
       uses: docker/build-push-action@v4
       with:
@@ -136,12 +220,25 @@ runs:
         tags: |
           ${{ inputs.image-repo }}/${{ inputs.repo-username }}/${{ inputs.image-name }}:${{ inputs.image-tag }}
 
+    # Push the image with the user-defined tag + latest
+    - name: Build and push latest
+      if: inputs.add-latest-tag == 'true' && inputs.add-latest-tag == 'true'
+      id: build-latest
+      uses: docker/build-push-action@v4
+      with:
+        platforms: linux/amd64
+        push: true
+        file: "${{inputs.dockerfile-path}}/Dockerfile"
+        tags: |
+          ${{ inputs.image-repo }}/${{ inputs.repo-username }}/${{ inputs.image-name }}:${{ inputs.image-tag }}
+          ${{ inputs.image-repo }}/${{ inputs.repo-username }}/${{ inputs.image-name }}:latest
+
     # Sign images
     - name: Sign tagged image
-      if: inputs.publish-image == 'true'
+      if: inputs.publish-image == 'true' && inputs.add-latest-tag == 'true'
       shell: bash
       run: |
-        cosign sign --tlog-upload=${{inputs.cosign-tlog}} --key env://COSIGN_PRIVATE_KEY ${{ inputs.image-repo }}/${{ inputs.repo-username }}/${{ inputs.image-name }}:${{ inputs.image-tag }}@${{ steps.build-tagged.outputs.digest }}
+        cosign sign --tlog-upload=${{inputs.cosign-tlog}} --key env://COSIGN_PRIVATE_KEY ${{ inputs.image-repo }}/${{ inputs.repo-username }}/${{ inputs.image-name }}:latest@${{ steps.build-latest.outputs.digest }}
       env:
         COSIGN_PRIVATE_KEY: ${{inputs.cosign-private-key}}
         COSIGN_PASSWORD: ${{inputs.cosign-password}}
