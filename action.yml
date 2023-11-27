@@ -34,10 +34,6 @@ inputs:
     description: "Set to true to upload to tlog for transparency."
     required: false
     default: 'false'
-  add-latest-tag:
-    description: "If true, the 'latest' tag will also be added."
-    required: false
-    default: 'false'
   publish-image:
     description: "If true the image will be published to the repo."
     default: 'false'
@@ -214,7 +210,7 @@ runs:
     ### USING DOCKERHUB ###
     # Push the image with the user-defined tag + latest
     - name: Build and push
-      if: inputs.add-latest-tag == 'true' && inputs.add-latest-tag == 'true' && inputs.use-dockerhub == 'true'
+      if: inputs.publish-image == 'true' && inputs.use-dockerhub == 'true'
       id: build-docker-latest
       uses: docker/build-push-action@v4
       with:
@@ -227,7 +223,7 @@ runs:
 
     # Sign images
     - name: Sign tagged image
-      if: inputs.publish-image == 'true' && inputs.add-latest-tag == 'true' && inputs.use-dockerhub == 'true'
+      if: inputs.publish-image == 'true' && inputs.use-dockerhub == 'true'
       shell: bash
       run: |
         cosign sign --tlog-upload=${{inputs.cosign-tlog}} --key env://COSIGN_PRIVATE_KEY ${{ inputs.image-repo }}/${{ inputs.image-name }}:latest@${{ steps.build-docker-latest.outputs.digest }}
@@ -239,9 +235,9 @@ runs:
     ### USING ALT REPO ###
 
     # Push the image with the user-defined tag + latest
-    - name: Build and push latest
-      if: inputs.add-latest-tag == 'true' && inputs.add-latest-tag == 'true'
-      id: build-latest
+    - name: Build and push
+      if: inputs.publish-image == 'true' && inputs.use-dockerhub != 'true'
+      id: build
       uses: docker/build-push-action@v4
       with:
         platforms: linux/amd64
@@ -253,7 +249,7 @@ runs:
 
     # Sign images
     - name: Sign tagged image
-      if: inputs.publish-image == 'true' && inputs.add-latest-tag == 'true'
+      if: inputs.publish-image == 'true' && inputs.use-dockerhub != 'true'
       shell: bash
       run: |
         cosign sign --tlog-upload=${{inputs.cosign-tlog}} --key env://COSIGN_PRIVATE_KEY ${{ inputs.image-repo }}/${{ inputs.repo-username }}/${{ inputs.image-name }}:latest@${{ steps.build-latest.outputs.digest }}
