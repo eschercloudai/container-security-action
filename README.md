@@ -33,7 +33,6 @@ For example:
           image-tag: "1.0"
           check-severity: CRITICAL
           trivyignore-file: "trivyignore"
-          add-latest-tag: true
           publish-image: true
           cosign-private-key: ${{secrets.COSIGN_KEY}}
           cosign-password: ${{secrets.COSIGN_PASSWORD}}
@@ -62,7 +61,6 @@ can supply the following:
         aws-secret-key: ${{secrets.AWS_SECRET_KEY}}
         s3-bucket: "BUCKET_NAME"
         s3-path: "path/to/some_trivyignore_file"
-        add-latest-tag: true
         publish-image: true
         cosign-private-key: ${{secrets.COSIGN_KEY}}
         cosign-password: ${{secrets.COSIGN_PASSWORD}}
@@ -86,6 +84,7 @@ This can then be supplied via the `cosign-private-key` and `cosign-password` inp
 
 | Name                   | Description                                        | Required | Default                        |
 |------------------------|----------------------------------------------------|----------|--------------------------------|
+| use-dockerhub          | Set to true to use dockerhub.                      | false    | false                          |
 | image-repo             | The repo to push the image to.                     | true     | -                              |
 | repo-username          | The username to log into the repo.                 | true     | -                              |
 | repo-password          | The password to log into the repo.                 | true     | -                              |
@@ -94,7 +93,6 @@ This can then be supplied via the `cosign-private-key` and `cosign-password` inp
 | cosign-private-key     | A private key to sign the image using Cosign.      | true     | -                              |
 | cosign-password        | The password to unlock the private key.            | true     | -                              |
 | cosign-tlog            | Set to true to upload to tlog for transparency.    | false    | 'false'                        |
-| add-latest-tag         | If true, the 'latest' tag will also be added.      | false    | 'false'                        |
 | publish-image          | If true, the image will be published to the repo.  | false    | 'false'                        |
 | check-severity         | Comma-delimited list of severities to check for.   | false    | high                           |
 | sbom-fail-on-detection | Exit code for Trivy SBOM scan.                     | false    | "1"                            |
