@@ -212,22 +212,10 @@ runs:
         password: ${{ inputs.repo-password }}
 
     ### USING DOCKERHUB ###
-    # Push the image with the user-defined tag
-    - name: Build and push tagged
-      if: inputs.publish-image == 'true' && inputs.add-latest-tag != 'true' && inputs.use-dockerhub == 'true'
-      id: build-tagged
-      uses: docker/build-push-action@v4
-      with:
-        platforms: linux/amd64
-        push: true
-        file: "${{inputs.dockerfile-path}}/Dockerfile"
-        tags: |
-          ${{ inputs.image-repo }}/${{ inputs.image-name }}:${{ inputs.image-tag }}
-
     # Push the image with the user-defined tag + latest
-    - name: Build and push latest
+    - name: Build and push
       if: inputs.add-latest-tag == 'true' && inputs.add-latest-tag == 'true' && inputs.use-dockerhub == 'true'
-      id: build-latest
+      id: build-docker-latest
       uses: docker/build-push-action@v4
       with:
         platforms: linux/amd64
@@ -242,25 +230,13 @@ runs:
       if: inputs.publish-image == 'true' && inputs.add-latest-tag == 'true' && inputs.use-dockerhub == 'true'
       shell: bash
       run: |
-        cosign sign --tlog-upload=${{inputs.cosign-tlog}} --key env://COSIGN_PRIVATE_KEY ${{ inputs.image-repo }}/${{ inputs.image-name }}:latest@${{ steps.build-latest.outputs.digest }}
+        cosign sign --tlog-upload=${{inputs.cosign-tlog}} --key env://COSIGN_PRIVATE_KEY ${{ inputs.image-repo }}/${{ inputs.image-name }}:latest@${{ steps.build-docker-latest.outputs.digest }}
       env:
         COSIGN_PRIVATE_KEY: ${{inputs.cosign-private-key}}
         COSIGN_PASSWORD: ${{inputs.cosign-password}}
         COSIGN_EXPERIMENTAL: "true"
 
     ### USING ALT REPO ###
-
-    # Push the image with the user-defined tag
-    - name: Build and push tagged
-      if: inputs.publish-image == 'true' && inputs.add-latest-tag != 'true'
-      id: build-tagged
-      uses: docker/build-push-action@v4
-      with:
-        platforms: linux/amd64
-        push: true
-        file: "${{inputs.dockerfile-path}}/Dockerfile"
-        tags: |
-          ${{ inputs.image-repo }}/${{ inputs.repo-username }}/${{ inputs.image-name }}:${{ inputs.image-tag }}
 
     # Push the image with the user-defined tag + latest
     - name: Build and push latest
