@@ -86,6 +86,7 @@ This can then be supplied via the `cosign-private-key` and `cosign-password` inp
 
 | Name                   | Description                                        | Required | Default                        |
 |------------------------|----------------------------------------------------|----------|--------------------------------|
+| use-dockerhub          | Set to true to use dockerhub.                      | false    | false                          |
 | image-repo             | The repo to push the image to.                     | true     | -                              |
 | repo-username          | The username to log into the repo.                 | true     | -                              |
 | repo-password          | The password to log into the repo.                 | true     | -                              |
