@@ -198,16 +198,16 @@ runs:
       if: inputs.publish-image == 'true'
       uses: sigstore/cosign-installer@v3.0.1
 
+    ### USING DOCKERHUB ###
+
     # Login into registry
     - name: Login to GitHub Container Registry
-      if: inputs.publish-image == 'true'
+      if: inputs.publish-image == 'true' && inputs.use-dockerhub == 'true'
       uses: docker/login-action@v2
       with:
-        registry: ${{ inputs.image-repo }}
         username: ${{ inputs.repo-username }}
         password: ${{ inputs.repo-password }}
 
-    ### USING DOCKERHUB ###
     # Push the image with the user-defined tag + latest
     - name: Build and push
       if: inputs.publish-image == 'true' && inputs.use-dockerhub == 'true'
@@ -233,6 +233,15 @@ runs:
         COSIGN_EXPERIMENTAL: "true"
 
     ### USING ALT REPO ###
+
+    # Login into registry
+    - name: Login to GitHub Container Registry
+      if: inputs.publish-image == 'true'
+      uses: docker/login-action@v2
+      with:
+        registry: ${{ inputs.image-repo }}
+        username: ${{ inputs.repo-username }}
+        password: ${{ inputs.repo-password }}
 
     # Push the image with the user-defined tag + latest
     - name: Build and push
