@@ -196,7 +196,7 @@ runs:
     # Install cosign
     - name: Install Cosign
       if: inputs.publish-image == 'true'
-      uses: sigstore/cosign-installer@v3.0.1
+      uses: sigstore/cosign-installer@v3.2.0
 
     ### USING DOCKERHUB ###
 
