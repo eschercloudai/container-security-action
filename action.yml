@@ -226,7 +226,7 @@ runs:
       if: inputs.publish-image == 'true' && inputs.use-dockerhub == 'true'
       shell: bash
       run: |
-        cosign sign --tlog-upload=${{inputs.cosign-tlog}} --key env://COSIGN_PRIVATE_KEY ${{ inputs.image-repo }}/${{ inputs.image-name }}:latest@${{ steps.build-docker-latest.outputs.digest }}
+        cosign sign --tlog-upload=${{inputs.cosign-tlog}} --yes --key env://COSIGN_PRIVATE_KEY ${{ inputs.image-repo }}/${{ inputs.image-name }}:latest@${{ steps.build-docker-latest.outputs.digest }}
       env:
         COSIGN_PRIVATE_KEY: ${{inputs.cosign-private-key}}
         COSIGN_PASSWORD: ${{inputs.cosign-password}}
@@ -261,7 +261,7 @@ runs:
       if: inputs.publish-image == 'true' && inputs.use-dockerhub != 'true'
       shell: bash
       run: |
-        cosign sign --tlog-upload=${{inputs.cosign-tlog}} --key env://COSIGN_PRIVATE_KEY ${{ inputs.image-repo }}/${{ inputs.repo-username }}/${{ inputs.image-name }}:latest@${{ steps.build-latest.outputs.digest }}
+        cosign sign --tlog-upload=${{inputs.cosign-tlog}} --yes --key env://COSIGN_PRIVATE_KEY ${{ inputs.image-repo }}/${{ inputs.repo-username }}/${{ inputs.image-name }}:latest@${{ steps.build-latest.outputs.digest }}
       env:
         COSIGN_PRIVATE_KEY: ${{inputs.cosign-private-key}}
         COSIGN_PASSWORD: ${{inputs.cosign-password}}
