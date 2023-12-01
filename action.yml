@@ -263,7 +263,7 @@ runs:
       run: |        
         cosign sign --tlog-upload=${{inputs.cosign-tlog}} --yes --key env://COSIGN_PRIVATE_KEY ${{ env.REPO }}/${{ inputs.image-name }}:${{ inputs.image-tag }}@${{ steps.build.outputs.digest }}
         
-        if [ ${{inputs.add-latest-tag}} ]; then
+        if [ ${{inputs.add-latest-tag}} == true ]; then
           cosign sign --tlog-upload=${{inputs.cosign-tlog}} --yes --key env://COSIGN_PRIVATE_KEY ${{ env.REPO }}/${{ inputs.image-name }}:latest@${{ steps.build-latest.outputs.digest }}
         fi
       env:
