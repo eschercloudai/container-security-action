@@ -221,16 +221,17 @@ runs:
         username: ${{ inputs.repo-username }}
         password: ${{ inputs.repo-password }}
 
-
     - name: Get Repo
+      shell: bash
+      if: inputs.publish-image == 'true'
       run: |
-        
         export REPO=${{ inputs.image-repo }}/${{ inputs.repo-username }}
         if [ ${{inputs.use-dockerhub}} ]; then
           echo "REPO=${{ inputs.image-repo }}" >> "$GITHUB_ENV"
         else
           echo "REPO=${{ inputs.image-repo }}/${{ inputs.repo-username }}" >> "$GITHUB_ENV"
         fi
+
     # Push the image with the user-defined tag
     - name: Build and push
       if: inputs.publish-image == 'true'
@@ -247,8 +248,8 @@ runs:
           fi
 
     # Sign images
-    - name: Sign tagged image
-      if: inputs.publish-image == 'true' && inputs.use-dockerhub != 'true'
+    - name: Sign tagged image(s)
+      if: inputs.publish-image == 'true'
       shell: bash
       run: |        
         cosign sign --tlog-upload=${{inputs.cosign-tlog}} --yes --key env://COSIGN_PRIVATE_KEY ${{ env.REPO }}/${{ inputs.image-name }}:${{ inputs.image-tag }}@${{ steps.build.outputs.digest }}
